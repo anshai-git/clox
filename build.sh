@@ -11,6 +11,8 @@ gcc -g        \
     debug.c   \
     value.h   \
     value.c   \
+    vm.h      \
+    vm.c      \
     -o clox
 
 # rm ./*.gch
