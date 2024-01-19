@@ -24,6 +24,8 @@ void write_chunk(Chunk* chunk, uint8_t byte, int line) {
   chunk->count++;
 }
 
+// After we add the constant, we return the index where the constant was appended
+// so that we can locate that same constant later.
 int add_constant(Chunk* chunk, Value value) {
   write_value_array(&chunk->constants, value);
   return chunk->constants.count - 1;

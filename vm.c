@@ -21,7 +21,16 @@ Value pop() {
   return *vm.stack_top;
 }
 
+// We have an outer loop that goes and goes.
+// Each turn through that loop, we read and execute a single bytecode instruction.
+//
+// we have a single giant switch statement with a case for each opcode.
+// The body of each case implements that opcode’s behavior.
 static InterpretResult run() {
+
+// Note that ip advances as soon as we read the opcode, before we’ve actually
+// started executing the instruction. So, again, ip points to the next
+// byte of code to be used.
 #define READ_BYTE() (*vm.ip++)
 
 #define BINARY_OP(op)                                                          \
@@ -46,7 +55,7 @@ static InterpretResult run() {
       printf("]");
     }
     printf("\n");
-    // Since disassembleInstruction() takes an integer byte offset and we store
+    // Since disassemble_instruction() takes an integer byte offset and we store
     // the current instruction reference as a direct pointer, we first do a
     // little pointer math to convert ip back to a relative offset from the
     // beginning of the bytecode.
@@ -94,6 +103,10 @@ static InterpretResult run() {
 #undef BINARY_OP
 }
 
+
+
+// First, we store the chunk being executed in the VM.
+// Then we call run(), an internal helper function that actually runs the bytecode instructions.
 InterpretResult interpret(Chunk* chunk) {
   vm.chunk = chunk;
   vm.ip = vm.chunk->code;
