@@ -1,6 +1,7 @@
 #include "vm.h"
 #include "common.h"
 #include "debug.h"
+#include "compiler.h"
 #include <stdio.h>
 
 VM vm;
@@ -22,7 +23,8 @@ Value pop() {
 }
 
 // We have an outer loop that goes and goes.
-// Each turn through that loop, we read and execute a single bytecode instruction.
+// Each turn through that loop, we read and execute a single bytecode
+// instruction.
 //
 // we have a single giant switch statement with a case for each opcode.
 // The body of each case implements that opcode’s behavior.
@@ -103,12 +105,10 @@ static InterpretResult run() {
 #undef BINARY_OP
 }
 
-
-
 // First, we store the chunk being executed in the VM.
-// Then we call run(), an internal helper function that actually runs the bytecode instructions.
-InterpretResult interpret(Chunk* chunk) {
-  vm.chunk = chunk;
-  vm.ip = vm.chunk->code;
-  return run();
+// Then we call run(), an internal helper function that actually runs the
+// bytecode instructions.
+InterpretResult interpret(const char* source) {
+  compile(source);
+  return INTERPRET_OK;
 }
