@@ -10,14 +10,14 @@ void compile(const char* source) {
   int line = -1;
 
   for (;;) {
-    token token = scan_token();
+    Token token = scan_token();
     if (token.line != line) {
-      printf("%4d", token.line);
+      printf(" %-3d", token.line);
       line = token.line;
     } else {
-      printf(" | ");
+      printf(" |  ");
     }
-    printf("%2d '%.*s'\n", token.type, token.length. token.start);
+    printf("%2d '%.*s'\n", token.type, token.length, token.start);
 
     if (token.type == TOKEN_EOF) break;
   }
