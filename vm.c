@@ -105,10 +105,27 @@ static InterpretResult run() {
 #undef BINARY_OP
 }
 
-// First, we store the chunk being executed in the VM.
-// Then we call run(), an internal helper function that actually runs the
-// bytecode instructions.
+// We create a new empty chunk and pass it over to the compiler.
+// The compiler will take the user’s program and fill up the chunk with bytecode.
+// If it does encounter an error, compile() returns false and
+// we discard the unusable chunk.
+//
+// Otherwise, we send the completed chunk over to the VM to be executed.
+// When the VM finishes, we free the chunk and we’re done
 InterpretResult interpret(const char* source) {
-  compile(source);
-  return INTERPRET_OK;
+  Chunk chunk;
+  init_chunk(&chunk);
+
+  if (!compile(&source, &chunk)) {
+    free_chunk(&chunk);
+    return INTERPRET_COMPILE_ERROR;
+  }
+
+  vm.chunk = &chunk;
+  vm.ip = vm.chunk->code;
+
+  InterpretResult result = run();
+  free_chunk(&chunk);
+
+  return result;
 }
