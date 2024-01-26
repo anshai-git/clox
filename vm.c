@@ -47,6 +47,7 @@ static InterpretResult run() {
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 
   for (;;) {
+
 #ifdef DEBUG_TRACE_EXECUTION
     //  show the current contents of the stack before we interpret each
     //  instruction.
@@ -63,6 +64,7 @@ static InterpretResult run() {
     // beginning of the bytecode.
     disassemble_instruction(vm.chunk, (int)(vm.ip - vm.chunk->code));
 #endif
+
     uint8_t instruction;
     switch (instruction = READ_BYTE()) {
     case OP_CONSTANT: {
@@ -116,7 +118,7 @@ InterpretResult interpret(const char* source) {
   Chunk chunk;
   init_chunk(&chunk);
 
-  if (!compile(&source, &chunk)) {
+  if (!compile(source, &chunk)) {
     free_chunk(&chunk);
     return INTERPRET_COMPILE_ERROR;
   }

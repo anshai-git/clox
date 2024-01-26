@@ -5,6 +5,10 @@
 #include "compiler.h"
 #include "scanner.h"
 
+#ifdef DEBUG_PRINT_CODE
+#include "debug.h"
+#endif
+
 typedef struct {
   Token current;
   Token previous;
@@ -12,10 +16,30 @@ typedef struct {
   bool panic_mode;
 } Parser;
 
-Parser parser;
-Chunk* compiling_chunk;
+typedef enum {
+  // LOWEST PRECENDENCE
+  PREC_NONE,
+  PREC_ASSIGNMENT, // =
+  PREC_OR,         // or
+  PREC_AND,        // and
+  PREC_EQUALITY,   // == !=
+  PREC_COMPARISON, // < > <= >=
+  PREC_TERM,       // + -
+  PREC_FACTOR,     // * /
+  PREC_UNARY,      // ! -
+  PREC_CALL,       // . ()
+  PREC_PRIMARY
+  // HIGHEST PRECENDENCE
+} Precendence;
 
-bool compile(const char* source, Chunk* chunk);
+typedef void (*ParseFn)();
+
+typedef struct {
+  ParseFn prefix;
+  ParseFn infix;
+  Precendence precendence;
+} ParseRule;
+
 
 // FRONT END
 static void advance();
@@ -32,9 +56,68 @@ static void end_compiler();
 static void expression();
 static void grouping();
 static void unary();
+static void binary();
 static void number();
 static void emit_constant(Value value);
 static uint8_t make_constant(Value value);
+static void parse_precendence(Precendence precendence);
+static ParseRule* get_rule(TokenType type);
+static Chunk* current_chunk();
+
+ParseRule rules[] = {
+  // If you haven’t seen the [TOKEN_DOT] = syntax in a C array literal, that is
+  // C99’s designated initializer syntax. It’s clearer than having to count array
+  // indexes by hand.
+  [TOKEN_LEFT_PAREN]    = {grouping, NULL,   PREC_NONE},
+  [TOKEN_RIGHT_PAREN]   = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_RIGHT_BRACE]   = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_COMMA]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_DOT]           = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_MINUS]         = {unary,    binary, PREC_TERM},
+  [TOKEN_PLUS]          = {NULL,     binary, PREC_TERM},
+  [TOKEN_SEMICOLON]     = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_SLASH]         = {NULL,     binary, PREC_FACTOR},
+  [TOKEN_STAR]          = {NULL,     binary, PREC_FACTOR},
+  [TOKEN_BANG]          = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_BANG_EQUAL]    = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_EQUAL]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_EQUAL_EQUAL]   = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_GREATER]       = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_GREATER_EQUAL] = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_LESS]          = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_LESS_EQUAL]    = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_IDENTIFIER]    = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_STRING]        = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
+  [TOKEN_AND]           = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_CLASS]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_ELSE]          = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_FALSE]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_FOR]           = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_FUN]           = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_IF]            = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_NIL]           = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_OR]            = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_PRINT]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_RETURN]        = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_SUPER]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_THIS]          = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_TRUE]          = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_VAR]           = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_WHILE]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_ERROR]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_EOF]           = {NULL,     NULL,   PREC_NONE},
+};
+
+
+
+
+Parser parser;
+Chunk* compiling_chunk;
+
+bool compile(const char* source, Chunk* chunk);
+
 
 // FE FUNCTIONS START
 static void error_at(Token* token, const char* message) {
@@ -70,6 +153,10 @@ static void consume(TokenType type, const char* message) {
   error_at_current(message);
 }
 
+//  It steps forward through the token stream.
+//  It asks the scanner for the next token and stores it for later use.
+//  Before doing that, it takes the old current token and stashes that
+//  in a previous field.
 static void advance() {
   parser.previous = parser.current;
 
@@ -85,26 +172,31 @@ static void advance() {
 
 // BE FUNCTIONS START
 
-//  It writes the given byte, which may be an opcode or an operand to an
-//  instruction.
-// It sends in the previous token’s line information so that runtime errors are
-// associated with that line.
+// It writes the given byte, which may be an opcode or an operand to an
+// instruction. It sends in the previous token’s line information so that
+// runtime errors are associated with that line.
 static void emit_byte(uint8_t byte) {
   write_chunk(current_chunk(), byte, parser.previous.line);
 }
 
 static void emit_bytes(uint8_t byte_1, uint8_t byte_2) {
-  enit_byte(byte_1);
-  enit_byte(byte_2);
+  emit_byte(byte_1);
+  emit_byte(byte_2);
 }
 
 static Chunk* current_chunk() { return compiling_chunk; }
 
-static void end_compiler() { emit_byte(OP_RETURN); }
+static void end_compiler() {
+  emit_byte(OP_RETURN);
 
-static void expression() {
-  // NOT IMPLEMENTED
+#ifdef DEBUG_PRINT_CODE
+  if (!parser.had_error) {
+    disassemble_chunk(current_chunk(), "code");
+  }
+#endif
 }
+
+static void expression() { parse_precendence(PREC_ASSIGNMENT); }
 
 static void number() {
   double value = strtod(parser.previous.start, NULL);
@@ -114,8 +206,11 @@ static void number() {
 static void unary() {
   TokenType operator_type = parser.previous.type;
 
-  // Compile the operand
-  expression();
+  // *Compile the operand*
+  // We use the unary operator’s own PREC_UNARY precedence to permit nested
+  // unary expressions like !!doubleNegative. Since unary operators have pretty
+  // high precedence, that correctly excludes things like binary operators.
+  parse_precendence(PREC_UNARY);
 
   // Emit the operator instruction
   switch (operator_type) {
@@ -125,6 +220,31 @@ static void unary() {
   }
   default:
     return;
+  }
+}
+
+static void binary() {
+  TokenType operator_type = parser.previous.type;
+  ParseRule* rule = get_rule(operator_type);
+  // We use one higher level of precedence for the right operand because the binary
+  // operators are left-associative.
+  parse_precendence((Precendence)(rule->precendence + 1));
+
+  switch (operator_type) {
+  case TOKEN_PLUS:
+    emit_byte(OP_ADD);
+    break;
+  case TOKEN_MINUS:
+    emit_byte(OP_SUBTRACT);
+    break;
+  case TOKEN_STAR:
+    emit_byte(OP_MULTIPLY);
+    break;
+  case TOKEN_SLASH:
+    emit_byte(OP_DIVIDE);
+    break;
+  default:
+    return; // Unreachable
   }
 }
 
@@ -148,6 +268,51 @@ static uint8_t make_constant(Value value) {
 static void grouping() {
   expression();
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression");
+}
+
+// Starts at the current token and parses any expression at the given precedence
+// level or higher.
+//
+// We look up a prefix parser for the current token. The first token is always
+// going to belong to some kind of prefix expression, by definition.
+// It may turn out to be nested as an operand inside one or more infix expressions,
+// but as you read the code from left to right, the first token you hit always
+// belongs to a prefix expression.
+//
+// 
+// After parsing that, which may consume more tokens, the prefix expression is
+// done. Now we look for an infix parser for the next token. If we find one, it
+// means the prefix expression we already compiled might be an operand for it. But
+// only if the call to parsePrecedence() has a precedence that is low enough to
+// permit that infix operator.
+// 
+// If the next token is too low precedence, or isn’t an infix operator at all,
+// we’re done. We’ve parsed as much expression as we can. Otherwise, we consume the
+// operator and hand off control to the infix parser we found. It consumes whatever
+// other tokens it needs (usually the right operand) and returns back to
+// parsePrecedence(). Then we loop back around and see if the next token is
+// also a valid infix operator that can take the entire preceding expression as its
+// operand.
+
+static void parse_precendence(Precendence precendence) {
+  advance();
+  ParseFn prefix_rule = get_rule(parser.previous.type)->prefix;
+  if (prefix_rule == NULL) {
+    error("Expect expression.");
+    return;
+  }
+
+  prefix_rule();
+
+  while (precendence <= get_rule(parser.current.type)->precendence) {
+    advance();
+    ParseFn infix_rule = get_rule(parser.previous.type)->infix;
+    infix_rule();
+  }
+}
+
+static ParseRule* get_rule(TokenType type) {
+  return &rules[type];
 }
 
 // BE FUNCTIONS END
