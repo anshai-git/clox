@@ -1,8 +1,9 @@
 #include "vm.h"
 #include "common.h"
-#include "debug.h"
 #include "compiler.h"
+#include "debug.h"
 #include <stdio.h>
+#include <stdarg.h>
 
 VM vm;
 
@@ -22,6 +23,36 @@ Value pop() {
   return *vm.stack_top;
 }
 
+static Value peek(int distance) {
+  return vm.stack_top[-1 - distance];
+}
+
+//  nil and false are falsey and every other value behaves like true.
+static bool is_falsey(Value value) {
+  return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+}
+
+// the ... and va_list stuff let us pass an arbitrary number of arguments
+// to runtimeError(). It forwards those on to vfprintf(), which is the
+// flavor of printf() that takes an explicit va_list.
+static void runtime_error(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  fputs("\n", stderr);
+
+  
+  // We look into the chunk’s debug line array using the current bytecode
+  // instruction index minus one. That’s because the interpreter advances
+  // past each instruction before executing it. So, at the point that we
+  // call runtimeError(), the failed instruction is the previous one.
+  size_t instruction = vm.ip - vm.chunk->code - 1;
+  int line = vm.chunk->lines[instruction];
+  fprintf(stderr, "[line %d] in script\n", line);
+  reset_stack();
+}
+
 // We have an outer loop that goes and goes.
 // Each turn through that loop, we read and execute a single bytecode
 // instruction.
@@ -35,11 +66,15 @@ static InterpretResult run() {
 // byte of code to be used.
 #define READ_BYTE() (*vm.ip++)
 
-#define BINARY_OP(op)                                                          \
+#define BINARY_OP(value_type, op)                                                          \
   do {                                                                         \
-    double b = pop();                                                          \
-    double a = pop();                                                          \
-    push(a op b);                                                              \
+    if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {                          \
+      runtime_error("Operands must be numbers.");                              \
+      return INTERPRET_RUNTIME_ERROR;                                          \
+    }                                                                          \
+    double b = AS_NUMBER(pop());                                                          \
+    double a = AS_NUMBER(pop());                                                          \
+    push(value_type(a op b));                                                              \
   } while (false)
 
 // reads the next byte from the bytecode, treats the resulting number as an
@@ -67,38 +102,43 @@ static InterpretResult run() {
 
     uint8_t instruction;
     switch (instruction = READ_BYTE()) {
-    case OP_CONSTANT: {
-      Value constant = READ_CONSTANT();
-      push(constant);
-      print_value(constant);
-      printf("\n");
-      break;
-    }
-    case OP_ADD: {
-      BINARY_OP(+);
-      break;
-    }
-    case OP_SUBTRACT: {
-      BINARY_OP(-);
-      break;
-    }
-    case OP_MULTIPLY: {
-      BINARY_OP(*);
-      break;
-    }
-    case OP_DIVIDE: {
-      BINARY_OP(/);
-      break;
-    }
-    case OP_NEGATE: {
-      push(-pop());
-      break;
-    }
-    case OP_RETURN: {
-      print_value(pop());
-      printf("\n");
-      return INTERPRET_OK;
-    }
+      case OP_CONSTANT: {
+        Value constant = READ_CONSTANT();
+        push(constant);
+        print_value(constant);
+        printf("\n");
+        break;
+      }
+      case OP_NIL:      push(NIL_VAL); break;
+      case OP_TRUE:     push(BOOL_VAL(true)); break;
+      case OP_FALSE:    push(BOOL_VAL(false)); break;
+      case OP_ADD:      BINARY_OP(NUMBER_VAL, +); break;
+      case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, -); break;
+      case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, *); break;
+      case OP_DIVIDE:   BINARY_OP(NUMBER_VAL, /); break;
+      case OP_NOT:      push(BOOL_VAL(is_falsey(pop()))); break;
+      case OP_GREATER:  BINARY_OP(BOOL_VAL, >); break;
+      case OP_LESS:     BINARY_OP(BOOL_VAL, <); break;
+      case OP_EQUAL: {
+        Value b = pop();
+        Value a = pop();
+        push(BOOL_VAL(values_equal(a, b)));
+        break;
+      }
+      case OP_NEGATE: {
+        if (!IS_NUMBER(peek(0))) {
+          runtime_error("Operand must be a number");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+
+        push(NUMBER_VAL(-AS_NUMBER(pop())));
+        break;
+      }
+      case OP_RETURN: {
+        print_value(pop());
+        printf("\n");
+        return INTERPRET_OK;
+      }
     }
   }
 
@@ -108,9 +148,9 @@ static InterpretResult run() {
 }
 
 // We create a new empty chunk and pass it over to the compiler.
-// The compiler will take the user’s program and fill up the chunk with bytecode.
-// If it does encounter an error, compile() returns false and
-// we discard the unusable chunk.
+// The compiler will take the user’s program and fill up the chunk with
+// bytecode. If it does encounter an error, compile() returns false and we
+// discard the unusable chunk.
 //
 // Otherwise, we send the completed chunk over to the VM to be executed.
 // When the VM finishes, we free the chunk and we’re done
