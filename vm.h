@@ -35,6 +35,10 @@ typedef struct {
   // stack top
   //
   Value* stack_top;
+
+  // Linked list of objects for the VM to kepp track of.
+  // Used for Garbage Collection
+  Object* objects;
 } VM;
 
 typedef enum {
@@ -42,6 +46,8 @@ typedef enum {
   INTERPRET_COMPILE_ERROR,
   INTERPRET_RUNTIME_ERROR
 } InterpretResult;
+
+extern VM vm;
 
 void init_vm();
 void free_vm();

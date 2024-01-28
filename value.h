@@ -3,13 +3,22 @@
 
 #include "common.h"
 
-typedef enum { VAL_BOOL, VAL_NIL, VAL_NUMBER } ValueType;
+typedef struct Object Object;
+typedef struct Object_String Object_String;
+
+typedef enum {
+  VAL_BOOL,
+  VAL_NIL,
+  VAL_NUMBER,
+  VAL_OBJECT
+} ValueType;
 
 typedef struct {
   ValueType type;
   union {
     bool boolean;
     double number;
+    Object* object;
   } as;
 } Value;
 
@@ -17,7 +26,7 @@ typedef struct {
 // Value that has the correct type tag and contains the underlying value. This
 // hoists statically typed values up into clox’s dynamically typed universe.
 #define BOOL_VAL(value)    ((Value){VAL_BOOL, {.boolean = value}})
-#define NIL_VAL ((Value)    {VAL_NIL, {.number = 0}})
+#define NIL_VAL ((Value) {VAL_NIL, {.number = 0}})
 #define NUMBER_VAL(value)  ((Value){VAL_NUMBER, {.number = value}})
 
 // These macros go in the opposite direction. Given a Value of the right type,
@@ -33,6 +42,15 @@ typedef struct {
 #define IS_BOOL(value)     ((value).type == VAL_BOOL)
 #define IS_NIL(value)      ((value).type) == VAL_NIL
 #define IS_NUMBER(value)   ((value).type == VAL_NUMBER)
+
+// This evaluates to true if the given Value is an Obj. If so, we can use this:
+#define IS_OBJECT(value)   ((value).type == VAL_OBJECT)
+
+// It extracts the Obj pointer from the value.
+#define AS_OBJECT(value)   ((value).as.object)
+
+// This takes a bare Object pointer and wraps it in a full Value.
+#define OBJECT_VAL(object) ((Value){VAL_OBJECT, {.object = (Object*)object}})
 
 typedef struct {
   int capacity;

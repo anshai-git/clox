@@ -4,6 +4,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "scanner.h"
+#include "object.h"
 
 #ifdef DEBUG_PRINT_CODE
 #include "debug.h"
@@ -41,7 +42,6 @@ typedef struct {
 } ParseRule;
 
 
-// FRONT END
 static void advance();
 static void error_at_current(const char* message);
 static void error_at(Token* token, const char* message);
@@ -49,7 +49,6 @@ static void error(const char* message);
 static void consume(TokenType type, const char* message);
 static void literal();
 
-// BACK END
 static void emit_byte(uint8_t byte);
 static void emit_bytes(uint8_t byte_1, uint8_t byte_2);
 static void end_compiler();
@@ -59,6 +58,7 @@ static void grouping();
 static void unary();
 static void binary();
 static void number();
+static void string();
 static void emit_constant(Value value);
 static uint8_t make_constant(Value value);
 static void parse_precendence(Precendence precendence);
@@ -89,7 +89,7 @@ ParseRule rules[] = {
   [TOKEN_LESS]          = {NULL,     binary, PREC_COMPARISON},
   [TOKEN_LESS_EQUAL]    = {NULL,     binary, PREC_COMPARISON},
   [TOKEN_IDENTIFIER]    = {NULL,     NULL,   PREC_NONE},
-  [TOKEN_STRING]        = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_STRING]        = {string,   NULL,   PREC_NONE},
   [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
   [TOKEN_AND]           = {NULL,     NULL,   PREC_NONE},
   [TOKEN_CLASS]         = {NULL,     NULL,   PREC_NONE},
@@ -116,7 +116,6 @@ Chunk* compiling_chunk;
 
 bool compile(const char* source, Chunk* chunk);
 
-// FE FUNCTIONS START
 static void error_at(Token* token, const char* message) {
   if (parser.panic_mode)
     return;
@@ -174,9 +173,6 @@ static void literal() {
     default: return; // Unreachable
   }
 }
-// FE FUNCTIONS END
-
-// BE FUNCTIONS START
 
 // It writes the given byte, which may be an opcode or an operand to an
 // instruction. It sends in the previous token’s line information so that
@@ -209,6 +205,19 @@ static void expression() {
 static void number() {
   double value = strtod(parser.previous.start, NULL);
   emit_constant(NUMBER_VAL(value));
+}
+
+// This takes the string’s characters directly from the
+// lexeme. The + 1 and - 2 parts trim the leading and trailing quotation marks.
+// It then creates a string object, wraps it in a Value, and stuffs it into the
+// constant table.
+//
+// NOTE:
+// If Lox supported string escape sequences like \n, we’d translate those here.
+// Since it doesn’t, we can take the characters as they are.
+static void string() {
+  emit_constant(OBJECT_VAL(copy_string(parser.previous.start + 1,
+                                       parser.previous.length - 2)));
 }
 
 static void unary() {
@@ -295,7 +304,6 @@ static void grouping() {
 // parsePrecedence(). Then we loop back around and see if the next token is
 // also a valid infix operator that can take the entire preceding expression as its
 // operand.
-
 static void parse_precendence(Precendence precendence) {
   advance();
   ParseFn prefix_rule = get_rule(parser.previous.type)->prefix;
@@ -316,8 +324,6 @@ static void parse_precendence(Precendence precendence) {
 static ParseRule* get_rule(TokenType type) {
   return &rules[type];
 }
-
-// BE FUNCTIONS END
 
 bool compile(const char* source, Chunk* chunk) {
   init_scanner(source);
