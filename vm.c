@@ -138,6 +138,7 @@ static InterpretResult run() {
           runtime_error("Operands must be two numbers or two strings.");
           return INTERPRET_RUNTIME_ERROR;
         }
+        break;
       }
       case OP_CONSTANT: {
         Value constant = READ_CONSTANT();

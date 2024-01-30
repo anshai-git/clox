@@ -17,6 +17,8 @@ gcc -g          \
     compiler.c  \
     scanner.h   \
     scanner.c   \
+    object.h    \
+    object.c    \
     -o clox
 
 # rm ./*.gch

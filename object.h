@@ -12,7 +12,7 @@
 // ObjString on the heap. The first one returns the ObjString* pointer. The
 // second one steps through that to return the character array itself
 #define AS_STRING(value)    ((Object_String*) AS_OBJECT(value))
-#define AS_CSTRING(value)   (((Object_String*)AS_OBJECT(value))->chars)
+#define AS_CSTRING(value)   (((Object_String*) AS_OBJECT(value))->chars)
 
 typedef enum {
   OBJECT_STRING,

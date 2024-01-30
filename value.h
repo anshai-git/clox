@@ -50,7 +50,7 @@ typedef struct {
 #define AS_OBJECT(value)   ((value).as.object)
 
 // This takes a bare Object pointer and wraps it in a full Value.
-#define OBJECT_VAL(object) ((Value){VAL_OBJECT, {.object = (Object*)object}})
+#define OBJECT_VAL(obj) ((Value){VAL_OBJECT, {.object = (Object*)obj}})
 
 typedef struct {
   int capacity;

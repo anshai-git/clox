@@ -15,3 +15,6 @@ Parsing strategy: **Pratt parser**
 
 A Pratt parser isn’t a recursive descent parser, but it’s still recursive.
 That’s to be expected since the grammar itself is recursive. 
+
+# Hash Tables
+

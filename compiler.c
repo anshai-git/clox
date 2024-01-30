@@ -216,8 +216,9 @@ static void number() {
 // If Lox supported string escape sequences like \n, we’d translate those here.
 // Since it doesn’t, we can take the characters as they are.
 static void string() {
-  emit_constant(OBJECT_VAL(copy_string(parser.previous.start + 1,
-                                       parser.previous.length - 2)));
+  emit_constant(
+      OBJECT_VAL(
+        copy_string(parser.previous.start + 1, parser.previous.length - 2)));
 }
 
 static void unary() {
