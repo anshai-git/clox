@@ -36,6 +36,7 @@ struct Object_String {
   Object object;
   int length;
   char* chars;
+  uint32_t hash;
 };
 
 Object_String* copy_string(const char* chars, int length);

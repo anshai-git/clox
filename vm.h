@@ -3,6 +3,8 @@
 
 #include "chunk.h"
 #include "value.h"
+#include "table.h"
+
 #define STACK_MAX 256
 
 typedef struct {
@@ -39,6 +41,9 @@ typedef struct {
   // Linked list of objects for the VM to kepp track of.
   // Used for Garbage Collection
   Object* objects;
+
+  // Internal Strings
+  Table strings;
 } VM;
 
 typedef enum {
