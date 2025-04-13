@@ -1,9 +1,12 @@
 #include "vm.h"
+#include "chunk.h"
 #include "common.h"
 #include "compiler.h"
 #include "debug.h"
 #include "object.h"
 #include "memory.h"
+#include "table.h"
+#include "value.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -16,10 +19,12 @@ static void reset_stack() { vm.stack_top = vm.stack; }
 void init_vm() { 
   reset_stack();
   vm.objects = NULL;
+  init_table(&vm.globals);
   init_table(&vm.strings);
 }
 
 void free_vm() {
+  free_table(&vm.globals);
   free_table(&vm.strings);
   free_objects();
 }
@@ -93,7 +98,6 @@ static InterpretResult run() {
 // started executing the instruction. So, again, ip points to the next
 // byte of code to be used.
 #define READ_BYTE() (*vm.ip++)
-
 #define BINARY_OP(value_type, op)                                                          \
   do {                                                                         \
     if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {                          \
@@ -108,6 +112,7 @@ static InterpretResult run() {
 // reads the next byte from the bytecode, treats the resulting number as an
 // index, and looks up the corresponding Value in the chunk’s constant table.
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+#define READ_STRING() AS_STRING(READ_CONSTANT())
 
   for (;;) {
 
@@ -153,6 +158,32 @@ static InterpretResult run() {
       case OP_NIL:      push(NIL_VAL); break;
       case OP_TRUE:     push(BOOL_VAL(true)); break;
       case OP_FALSE:    push(BOOL_VAL(false)); break;
+      case OP_POP:      pop(); break;
+      case OP_SET_GLOBAL: {
+        Object_String* name = READ_STRING();
+        if (table_set(&vm.globals, name, peek(0))) {
+          table_delete(&vm.globals, name);
+          runtime_error("undefined variable '%s'.");
+          return INTERPRET_RUNTIME_ERROR;
+          break;
+        }
+      }
+      case OP_GET_GLOBAL: {
+        Object_String* name = READ_STRING();
+        Value value;
+        if (!table_get(&vm.globals, name, &value)) {
+          runtime_error("Undefined variable '%s'.", name->chars);
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        push(value);
+        break;
+      }
+      case OP_DEFINE_GLOBAL: {
+        Object_String* name = READ_STRING();
+        table_set(&vm.globals, name, peek(0));
+        pop();
+        break;
+      }
       case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, -); break;
       case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, *); break;
       case OP_DIVIDE:   BINARY_OP(NUMBER_VAL, /); break;
@@ -174,9 +205,13 @@ static InterpretResult run() {
         push(NUMBER_VAL(-AS_NUMBER(pop())));
         break;
       }
-      case OP_RETURN: {
+      case OP_PRINT: {
         print_value(pop());
         printf("\n");
+        break;
+      }
+      case OP_RETURN: {
+        // Exit interpreter
         return INTERPRET_OK;
       }
     }
@@ -185,6 +220,7 @@ static InterpretResult run() {
 #undef READ_BYTE
 #undef READ_CONSTANT
 #undef BINARY_OP
+#undef READ_STRING
 }
 
 // We create a new empty chunk and pass it over to the compiler.

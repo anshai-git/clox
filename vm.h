@@ -44,6 +44,9 @@ typedef struct {
 
   // Internal Strings
   Table strings;
+
+  // Since we want them to persist as long as clox is running, we store them right in the VM
+  Table globals;
 } VM;
 
 typedef enum {

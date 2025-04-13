@@ -2,7 +2,6 @@
 #include <string.h>
 
 #include "memory.h"
-#include "object.h"
 #include "table.h"
 #include "value.h"
 
@@ -42,7 +41,7 @@ static Entry* find_entry(Entry* entries, int capacity, Object_String* key) {
     if (entry->key == NULL) {
       if (IS_NIL(entry->value)) {
         // Empty entry
-        return tombstone != null ? tombstone : entry;
+        return tombstone != NULL ? tombstone : entry;
       } else {
         // We found a tombstone
         if (tombstone == NULL) tombstone = entry;

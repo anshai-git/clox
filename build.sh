@@ -1,24 +1,32 @@
-#!/bin/sh
+# #!/bin/bash
 
-gcc -g          \
-    main.c      \
-    memory.h    \
-    memory.c    \
-    chunk.h     \
-    chunk.c     \
-    common.h    \
-    debug.h     \
-    debug.c     \
-    value.h     \
-    value.c     \
-    vm.h        \
-    vm.c        \
-    compiler.h  \
-    compiler.c  \
-    scanner.h   \
-    scanner.c   \
-    object.h    \
-    object.c    \
-    -o clox
+set -e
 
-# rm ./*.gch
+# Name of the output executable
+OUTPUT="lox"
+
+# Compiler
+CC=clang
+
+# Compiler flags
+CFLAGS="-std=c99 -Wall -Wextra -O2"
+
+# Source files (order doesn't matter here, but can help readability)
+SOURCES=(
+  chunk.c
+  compiler.c
+  debug.c
+  main.c
+  memory.c
+  object.c
+  scanner.c
+  table.c
+  value.c
+  vm.c
+)
+
+# Build command
+echo "Compiling..."
+$CC $CFLAGS "${SOURCES[@]}" -o $OUTPUT
+
+echo "Build complete: ./$OUTPUT"
