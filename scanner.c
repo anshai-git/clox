@@ -75,8 +75,8 @@ static TokenType identifier_type() {
       }
     }
     break;
-    return TOKEN_IDENTIFIER;
   }
+  return TOKEN_IDENTIFIER;
 }
 
 static bool is_at_end() { return *scanner.current == '\0'; }

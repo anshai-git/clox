@@ -1,7 +1,9 @@
+#include <string.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "chunk.h"
 #include "common.h"
 #include "compiler.h"
 #include "scanner.h"
@@ -43,6 +45,16 @@ typedef struct {
   Precendence precendence;
 } ParseRule;
 
+typedef struct {
+  Token name;
+  int depth;
+} Local;
+
+typedef struct {
+  Local locals[UINT8_COUNT];
+  int local_count;
+  int scope_depth;
+} Compiler;
 
 static void advance();
 static void error_at_current(const char* message);
@@ -121,6 +133,7 @@ ParseRule rules[] = {
 };
 
 Parser parser;
+Compiler* current = NULL;
 Chunk* compiling_chunk;
 
 bool compile(const char* source, Chunk* chunk);
@@ -346,6 +359,12 @@ static void emit_constant(Value value) {
   emit_bytes(OP_CONSTANT, make_constant(value));
 }
 
+static void init_compiler(Compiler* compiler) {
+  compiler->local_count = 0;
+  compiler->scope_depth = 0;
+  current = compiler;
+}
+
 static uint8_t make_constant(Value value) {
   int constant = add_constant(current_chunk(), value);
   if (constant > UINT8_MAX) {
@@ -413,12 +432,65 @@ static uint8_t identifier_constant(Token* name) {
   return make_constant(OBJECT_VAL(copy_string(name->start, name->length)));
 }
 
+static void add_local(Token name) {
+  if (current->local_count == UINT8_COUNT) {
+    error("Too manu local variables in function.");
+    return;
+  }
+  Local* local = &current->locals[current->local_count++];
+  local->name = name;
+  local->depth = current->scope_depth;
+}
+
+static bool identifiers_equal(Token* a, Token* b) {
+  if (a->length != b->length) {
+    return false;
+  }
+
+  return memcmp(a->start, b->start, a->length) == 0;
+}
+
+// This is the point where the compiler records the existence of the variable. We
+// only do this for locals, so if we’re in the top-level global scope, we just bail
+// out. Because global variables are late bound, the compiler doesn’t keep track of
+// which declarations for them it has seen.
+static void declare_variable() {
+  if (current->scope_depth == 0) {
+    return;
+  }
+
+  Token* name = &parser.previous;
+  for (int i = current->local_count - 1; i >= 0; i--) {
+    Local* local = &current->locals[i];
+    if (local->depth != -1 && local->depth < current->scope_depth) {
+      break;
+    }
+
+    if (identifiers_equal(name, &local->name)) {
+      error("Already a variable with this name is this scope.");
+    }
+  }
+  add_local(*name);
+}
+
 static uint8_t parse_variable(const char* error_message) {
   consume(TOKEN_IDENTIFIER, error_message);
+  declare_variable();
+  // At runtime, locals aren’t
+  // looked up by name. There’s no need to stuff the variable’s name into the
+  // constant table, so if the declaration is inside a local scope, we return a dummy
+  // table index instead
+  if (current->scope_depth > 0) {
+    return 0;
+  }
   return identifier_constant(&parser.previous);
 }
 
 static void define_variable(uint8_t global) {
+  if (current->scope_depth > 0) {
+    return;
+  }
+
   emit_bytes(OP_DEFINE_GLOBAL, global);
 }
 
@@ -428,6 +500,8 @@ static ParseRule* get_rule(TokenType type) {
 
 bool compile(const char* source, Chunk* chunk) {
   init_scanner(source);
+  Compiler compiler;
+  init_compiler(&compiler);
   compiling_chunk = chunk;
 
   // SYNCHRONIZATION POINT
@@ -463,6 +537,27 @@ bool compile(const char* source, Chunk* chunk) {
   return !parser.had_error;
 }
 
+static void begin_scope() {
+  current->scope_depth++;
+}
+
+static void end_scope() {
+  current->scope_depth--;
+  while (current->local_count > 0 && 
+      current->locals[current->local_count - 1].depth > current->scope_depth) {
+    emit_byte(OP_POP);
+    current->local_count--;
+  }
+}
+
+static void block() {
+  while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+    declaration();
+  }
+
+  consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+}
+
 static void declaration() {
   if (match(TOKEN_VAR)) {
     var_declaration();
@@ -475,6 +570,10 @@ static void declaration() {
 static void statement() {
   if (match(TOKEN_PRINT)) {
     print_statement();
+  } else if (match(TOKEN_LEFT_BRACE)) {
+    begin_scope();
+    block();
+    end_scope();
   } else {
     expression_statement();
   }
