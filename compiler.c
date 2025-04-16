@@ -302,13 +302,47 @@ static void string(bool can_assign) {
         copy_string(parser.previous.start + 1, parser.previous.length - 2)));
 }
 
+static bool identifiers_equal(Token* a, Token* b) {
+  if (a->length != b->length) {
+    return false;
+  }
+
+  return memcmp(a->start, b->start, a->length) == 0;
+}
+
+static int resolve_local(Compiler* compiler, Token* name) {
+  for (int i = compiler->local_count - 1; i >= 0; i--) {
+    Local* local = &compiler->locals[i];
+    if (identifiers_equal(name, &local->name)) {
+      if (local->depth == -1) {
+        error("Can't read local variable in its own initializer");
+      }
+      return i;
+    }
+  }
+
+  return -1;
+
+}
+
 static void named_variable(Token name, bool can_assign) {
-  uint8_t arg = identifier_constant(&name);
+  uint8_t get_op, set_op;
+  int arg = resolve_local(current, &name);
+
+  if (arg != -1) {
+    get_op = OP_GET_LOCAL;
+    set_op = OP_SET_LOCAL;
+  } else {
+    arg = identifier_constant(&name);
+    get_op = OP_GET_GLOBAL;
+    set_op = OP_SET_GLOBAL;
+  }
+
   if (can_assign && match(TOKEN_EQUAL)) {
     expression();
-    emit_bytes(OP_SET_GLOBAL, arg);
+    emit_bytes(OP_SET_GLOBAL, (uint8_t) arg);
   } else {
-    emit_bytes(OP_GET_GLOBAL, arg);
+    emit_bytes(OP_GET_GLOBAL, (uint8_t) arg);
   }
 }
 
@@ -439,15 +473,8 @@ static void add_local(Token name) {
   }
   Local* local = &current->locals[current->local_count++];
   local->name = name;
+  local->depth = -1;
   local->depth = current->scope_depth;
-}
-
-static bool identifiers_equal(Token* a, Token* b) {
-  if (a->length != b->length) {
-    return false;
-  }
-
-  return memcmp(a->start, b->start, a->length) == 0;
 }
 
 // This is the point where the compiler records the existence of the variable. We
@@ -486,8 +513,13 @@ static uint8_t parse_variable(const char* error_message) {
   return identifier_constant(&parser.previous);
 }
 
+static void mark_initialized() {
+  current->locals[current->local_count - 1].depth = current->scope_depth;
+}
+
 static void define_variable(uint8_t global) {
   if (current->scope_depth > 0) {
+    mark_initialized();
     return;
   }
 
