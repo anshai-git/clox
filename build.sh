@@ -2,6 +2,7 @@
 
 set -e
 SOURCES=(
+  value.c
   debug.c
   chunk.c   
   memory.c  
@@ -10,6 +11,6 @@ SOURCES=(
 
 echo "Compiling..."
 
-clang -std=c99 -Wall -Wextra -O2 "${SOURCES[@]}" -o lox
+clang -g -std=c99 -Wall -Wextra -O2 "${SOURCES[@]}" -o lox
 
 echo "Build complete: ./$OUTPUT"
