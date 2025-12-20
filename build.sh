@@ -2,6 +2,9 @@
 
 set -e
 SOURCES=(
+  debug.c
+  chunk.c   
+  memory.c  
   main.c
 )
 
