@@ -5,8 +5,13 @@
 #include "value.h"
 
 typedef enum {
-  OP_RETURN,
   OP_CONSTANT,
+  OP_ADD,
+  OP_SUBTRACT,
+  OP_MULTIPLY,
+  OP_DIVIDE,
+  OP_NEGATE,
+  OP_RETURN,
 } Op_Code;
 
 typedef struct {
@@ -24,4 +29,3 @@ void free_chunk(Chunk* chunk);
 int add_constant(Chunk* chunk, Value value);
 
 #endif // !clox_chunk_h
-

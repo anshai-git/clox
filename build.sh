@@ -2,6 +2,7 @@
 
 set -e
 SOURCES=(
+  vm.c
   value.c
   debug.c
   chunk.c   
