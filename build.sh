@@ -2,6 +2,8 @@
 
 set -e
 SOURCES=(
+  compiler.c
+  scanner.c
   vm.c
   value.c
   debug.c
