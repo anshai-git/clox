@@ -92,7 +92,7 @@ static void skip_whitespace() {
 }
 
 static Token_Type check_keyword(int start, int length, const char* rest, Token_Type type) {
-  if (scanner.current == scanner.start == start + length 
+  if (scanner.current - scanner.start == start + length 
       && memcmp(scanner.start + start , rest , length) == 0) {
     return type;
   }
