@@ -2,6 +2,7 @@
 
 set -e
 SOURCES=(
+  object.c
   compiler.c
   scanner.c
   vm.c
