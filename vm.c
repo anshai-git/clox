@@ -25,8 +25,8 @@ static bool is_falsey(Value value) {
 
 static void concatenate() {
   printf("From concatenate\n");
-  ObjString* a = AS_STRING(pop());
   ObjString* b = AS_STRING(pop());
+  ObjString* a = AS_STRING(pop());
 
   int length = a->length + b->length;
   char* chars = ALLOCATE(char, length + 1);
@@ -91,13 +91,12 @@ static Interpret_Result run() {
     case OP_GREATER:    BINARY_OP(BOOL_VAL, >); break;
     case OP_LESS:       BINARY_OP(BOOL_VAL, <); break;
     case OP_ADD: {
-      print_value(peek(0));
-      print_value(peek(1));
       if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
         concatenate();
       } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
         BINARY_OP(NUMBER_VAL, +); break;
       }
+      break;
     };
     case OP_SUBTRACT:   BINARY_OP(NUMBER_VAL, -); break;
     case OP_MULTIPLY:   BINARY_OP(NUMBER_VAL, *); break;
